@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GAN Loss Curves: Interactive Demo</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@400;500&display=swap');
+
+:root {
+  --bg: #08080e;
+  --bg2: #0f0f18;
+  --bg3: #16161f;
+  --bg4: #1d1d28;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.13);
+  --text: #e4e4f0;
+  --muted: #5a5a70;
+  --muted2: #8a8aa0;
+  --orig: #ff5f5f;
+  --orig-dim: rgba(255,95,95,0.15);
+  --orig-glow: rgba(255,95,95,0.4);
+  --cls: #3dd9d0;
+  --cls-dim: rgba(61,217,208,0.15);
+  --cls-glow: rgba(61,217,208,0.4);
+  --accent: #f0c040;
+  --accent-dim: rgba(240,192,64,0.12);
+  --warn: #ff9500;
+  --green: #4ade80;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+.noise {
+  position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 0; opacity: 0.4;
+}
+
+.wrap { position: relative; z-index: 1; max-width: 1060px; margin: 0 auto; padding: 36px 20px 80px; }
+
+header { margin-bottom: 32px; overflow: visible; }
+.eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; letter-spacing: 0.22em; color: var(--muted);
+  text-transform: uppercase; margin-bottom: 10px;
+}
+h1 { font-size: clamp(22px, 3.5vw, 34px); font-weight: 800; line-height: 1.5; margin-bottom: 16px; overflow: visible; padding-bottom: 8px; font-family: 'DM Sans', system-ui, sans-serif; }
+h1 em { font-style: normal; color: var(--cls); }
+h1 span { color: var(--orig); }
+.sub { font-size: 14px; color: var(--muted2); max-width: 600px; line-height: 2.1; overflow: visible; font-family: 'DM Sans', system-ui, sans-serif; }
+
+/* STEPPER */
+.stepper { display: flex; gap: 6px; margin-bottom: 28px; flex-wrap: wrap; }
+.sbtn {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  padding: 7px 16px; border-radius: 3px;
+  border: 1px solid var(--border); background: var(--bg2);
+  color: var(--muted); cursor: pointer; transition: all 0.18s;
+}
+.sbtn:hover { border-color: var(--border2); color: var(--text); }
+.sbtn.active { background: var(--bg3); border-color: var(--accent); color: var(--accent); }
+
+.prog-bar { height: 1px; background: var(--border); margin-bottom: 28px; }
+.prog-fill { height: 100%; background: var(--accent); transition: width 0.4s; box-shadow: 0 0 8px var(--accent); }
+
+/* MAIN GRID */
+.main { display: grid; grid-template-columns: 1fr 290px; gap: 16px; align-items: start; }
+@media(max-width:740px){ .main { grid-template-columns:1fr; } }
+
+/* PANELS */
+.panel {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.panel > *:first-child { border-radius: 10px 10px 0 0; }
+.panel > *:last-child { border-radius: 0 0 10px 10px; }
+.panel-head {
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.panel-body { padding: 16px; }
+
+canvas { display: block; width: 100%; }
+
+/* VIEW TOGGLE */
+.view-toggle { display: flex; gap: 0; }
+.vtbtn {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 4px 10px; border: 1px solid var(--border);
+  background: transparent; color: var(--muted); cursor: pointer;
+  transition: all 0.15s;
+}
+.vtbtn:first-child { border-radius: 3px 0 0 3px; }
+.vtbtn:last-child { border-radius: 0 3px 3px 0; border-left: none; }
+.vtbtn.active { background: var(--bg4); color: var(--text); border-color: var(--border2); }
+
+/* LEGEND */
+.legend { display: flex; gap: 18px; padding: 10px 16px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.leg { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted2); }
+.leg-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+/* FORMULA */
+.formula {
+  padding: 10px 16px 14px; border-top: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: var(--muted); line-height: 2;
+}
+.fo { color: var(--orig); }
+.fc { color: var(--cls); }
+
+/* SIDEBAR */
+.sidebar { display: flex; flex-direction: column; gap: 14px; }
+
+.narrative { font-size: 13px; line-height: 1.85; color: #9090aa; min-height: 130px; font-family: 'DM Sans', system-ui, sans-serif; }
+.narrative strong { color: var(--text); }
+.ho { color: var(--orig); font-weight: 600; }
+.hc { color: var(--cls); font-weight: 600; }
+.ha { color: var(--accent); font-weight: 600; }
+
+.insight {
+  display: none; margin-top: 12px;
+  background: var(--accent-dim); border: 1px solid rgba(240,192,64,0.2);
+  border-radius: 6px; padding: 10px 12px;
+  font-size: 12px; line-height: 1.6; color: var(--accent);
+  font-family: 'JetBrains Mono', monospace;
+}
+.insight.show { display: block; }
+
+/* WARN BADGE */
+.warn-badge {
+  display: none; margin-top: 10px;
+  background: rgba(255,149,0,0.1); border: 1px solid rgba(255,149,0,0.3);
+  border-radius: 6px; padding: 10px 12px;
+  font-size: 12px; color: var(--warn); line-height: 1.5;
+  font-family: 'JetBrains Mono', monospace;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.warn-badge.show { display: block; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+/* D VALUE */
+.d-display {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 14px;
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 12px;
+}
+.d-display .lbl { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
+.d-display .val { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 600; color: var(--accent); }
+
+/* METERS */
+.meters { display: flex; flex-direction: column; gap: 12px; }
+.mrow { display: flex; flex-direction: column; gap: 5px; }
+.mlabel { display: flex; justify-content: space-between; align-items: center; }
+.mname { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); }
+.mval { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; }
+.mtrack { height: 5px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow:hidden; }
+.mfill { height: 100%; border-radius: 3px; transition: width 0.12s; }
+.mfill.o { background: var(--orig); box-shadow: 0 0 6px var(--orig-glow); }
+.mfill.c { background: var(--cls); box-shadow: 0 0 6px var(--cls-glow); }
+
+/* CONTROLS */
+.ctrls { display: flex; gap: 8px; }
+.cbtn {
+  flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 9px 6px; border-radius: 5px;
+  border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text); cursor: pointer; transition: all 0.15s;
+}
+.cbtn:hover { border-color: var(--border2); }
+.cbtn.playing { border-color: var(--cls); color: var(--cls); }
+.cbtn.rst { color: var(--muted); }
+
+/* RACE */
+.race-wrap { padding: 14px 16px; }
+.race-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px; }
+.race-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.race-name { font-size: 11px; width: 56px; flex-shrink: 0; font-family: 'JetBrains Mono', monospace; }
+.race-track { flex: 1; height: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; overflow: hidden; position: relative; }
+.race-fill { height: 100%; border-radius: 5px; transition: width 0.06s; position: relative; }
+.race-fill.o { background: var(--orig); box-shadow: 0 0 10px var(--orig-glow); }
+.race-fill.c { background: var(--cls); box-shadow: 0 0 10px var(--cls-glow); }
+.race-epoch { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 6px; text-align: right; }
+.race-note { font-size: 11px; color: var(--muted2); line-height: 1.5; margin-top: 8px; }
+
+/* TRAINING SIM */
+.sim-wrap { padding: 14px 16px; }
+.sim-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+.sim-box {
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px;
+}
+.sim-box-title { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 8px; }
+.sim-canvas { display: block; width: 100%; border-radius: 4px; }
+.sim-stat { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); margin-top: 6px; padding-bottom: 4px; }
+.sim-btn {
+  width: 100%; font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 8px; border-radius: 5px;
+  border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text); cursor: pointer; transition: all 0.15s; margin-top: 8px;
+}
+.sim-btn:hover { border-color: var(--border2); }
+.sim-btn.running { border-color: var(--green); color: var(--green); }
+</style>
+</head>
+<body>
+<div class="noise"></div>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Generative Adversarial Networks</div>
+  <h1>Why the <em>Non-Saturating Loss</em><br>Beats the <span>Original GAN</span></h1>
+  <p class="sub">An interactive exploration of generator loss curves, gradient behavior, and training dynamics in GANs.</p>
+</header>
+
+<div class="stepper">
+  <button class="sbtn active" onclick="goStep(0)">01: Two Losses</button>
+  <button class="sbtn" onclick="goStep(1)">02: Early Training</button>
+  <button class="sbtn" onclick="goStep(2)">03: Late Training</button>
+  <button class="sbtn" onclick="goStep(3)">04: Speed Race</button>
+  <button class="sbtn" onclick="goStep(4)">05: Sim</button>
+  <button class="sbtn" onclick="goStep(5)">06: Explore</button>
+</div>
+<div class="prog-bar"><div class="prog-fill" id="pf" style="width:16.6%"></div></div>
+
+<div class="main">
+  <!-- LEFT COLUMN -->
+  <div style="display:flex;flex-direction:column;gap:14px;">
+
+    <!-- MAIN CURVE PANEL -->
+    <div class="panel" id="curvePanel">
+      <div class="panel-head">
+        <span>Generator Loss Curves</span>
+        <div class="view-toggle">
+          <button class="vtbtn active" onclick="setView('loss')">Loss</button>
+          <button class="vtbtn" onclick="setView('grad')">Gradient |∂L/∂D|</button>
+        </div>
+      </div>
+      <div class="panel-body" style="padding:14px 14px 0;">
+        <canvas id="mainCanvas" height="340"></canvas>
+      </div>
+      <div class="legend">
+        <div class="leg"><div class="leg-dot" style="background:var(--orig)"></div><span>Original: min log(1&minus;D(G(z)))</span></div>
+        <div class="leg"><div class="leg-dot" style="background:var(--cls)"></div><span>Class: max log(D(G(z)))</span></div>
+      </div>
+      <div class="formula">
+        Orig loss: <span class="fo">L = log(1&minus;D(G(z)))</span>&nbsp;&nbsp;&nbsp;Orig gradient: <span class="fo">∂L/∂D = &minus;1/(1&minus;D)</span><br>
+        Class loss: <span class="fc">L = &minus;log(D(G(z)))</span>&nbsp;&nbsp;&nbsp;Class gradient: <span class="fc">∂L/∂D = &minus;1/D</span><br>
+        <span style="color:var(--muted);font-size:10px;">Gradients shown are ∂L/∂D — a proxy for generator learning signal. Actual ∂L/∂&theta;<sub>G</sub> depends on the chain rule through D.</span>
+      </div>
+    </div>
+
+    <!-- SPEED RACE PANEL -->
+    <div class="panel" id="racePanel" style="display:none;">
+      <div class="panel-head">Speed Race: Gradient-Driven Learning</div>
+      <div class="race-wrap">
+        <div class="race-label">Progress toward D(G(z)) = 1 &nbsp;(speed ∝ gradient magnitude)</div>
+        <div class="race-row">
+          <span class="race-name" style="color:var(--orig)">Original</span>
+          <div class="race-track"><div class="race-fill o" id="raceOrig" style="width:0%"></div></div>
+        </div>
+        <div class="race-row">
+          <span class="race-name" style="color:var(--cls)">Class</span>
+          <div class="race-track"><div class="race-fill c" id="raceCls" style="width:0%"></div></div>
+        </div>
+        <div class="race-epoch" id="raceEpoch">Step 0</div>
+        <p class="race-note">Each step advances proportionally to the gradient at the current D(G(z)) value. Watch how the original loss barely moves early while the class loss races ahead.</p>
+      </div>
+    </div>
+
+    <!-- TRAINING SIM PANEL -->
+    <div class="panel" id="simPanel" style="display:none;">
+      <div class="panel-head">Training Simulation: Synthetic Distribution</div>
+      <div class="sim-wrap">
+        <div class="sim-grid">
+          <div class="sim-box">
+            <div class="sim-box-title" style="color:var(--orig)">Original Loss</div>
+            <canvas class="sim-canvas" id="simOrig" width="160" height="120"></canvas>
+            <div class="sim-stat" id="simOrigStat">Epoch 0 / D(G(z)) = 0.01</div>
+          </div>
+          <div class="sim-box">
+            <div class="sim-box-title" style="color:var(--cls)">Class (Non-Saturating) Loss</div>
+            <canvas class="sim-canvas" id="simCls" width="160" height="120"></canvas>
+            <div class="sim-stat" id="simClsStat">Epoch 0 / D(G(z)) = 0.01</div>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--muted2);line-height:1.6;margin-bottom:8px;">
+          Blue = real data distribution. Red dots = generator samples. Watch how quickly each loss drives the generator toward the real distribution.
+        </p>
+        <button class="sim-btn" id="simBtn" onclick="toggleSim()">&#9654; Run Simulation</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <div class="panel">
+      <div class="panel-head">Step Insight</div>
+      <div class="panel-body">
+        <div class="narrative" id="narr"></div>
+        <div class="insight" id="ins"></div>
+        <div class="warn-badge" id="warn"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">Live Gradient Signal</div>
+      <div class="panel-body">
+        <div class="d-display">
+          <span class="lbl">D(G(z))</span>
+          <span class="val" id="dVal">—</span>
+        </div>
+        <div class="meters">
+          <div class="mrow">
+            <div class="mlabel">
+              <span class="mname" style="color:var(--orig)">Original |∂L/∂D|</span>
+              <span class="mval" id="gOrig" style="color:var(--orig)">—</span>
+            </div>
+            <div class="mtrack"><div class="mfill o" id="fOrig" style="width:0%"></div></div>
+          </div>
+          <div class="mrow">
+            <div class="mlabel">
+              <span class="mname" style="color:var(--cls)">Class |∂L/∂D|</span>
+              <span class="mval" id="gCls" style="color:var(--cls)">—</span>
+            </div>
+            <div class="mtrack"><div class="mfill c" id="fCls" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="ctrlPanel">
+      <div class="panel-head">Controls</div>
+      <div class="panel-body">
+        <div class="ctrls">
+          <button class="cbtn" id="playBtn" onclick="togglePlay()">&#9654; Play</button>
+          <button class="cbtn rst" onclick="resetAll()">&#8635; Reset</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- TAKEAWAY BOX -->
+<div id="takeawayBox" style="display:none; margin-top:20px;">
+  <div style="background:rgba(61,217,208,0.06); border:1px solid rgba(61,217,208,0.2); border-radius:10px; padding:20px 24px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.18em; text-transform:uppercase; color:rgba(61,217,208,0.6); margin-bottom:12px;">Key Takeaway</div>
+    <p style="font-family:'DM Sans',system-ui,sans-serif; font-size:15px; line-height:1.75; color:#e4e4f0; margin:0;">
+      The <strong style="color:#ff5f5f">original GAN loss</strong> saturates when D(G(z)) ≈ 0 — exactly when the generator needs guidance most. The <strong style="color:#3dd9d0">non-saturating loss</strong> provides a large gradient signal early in training, which is why it is used in practice.
+    </p>
+  </div>
+</div>
+
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let step = 0;
+let view = 'loss'; // 'loss' | 'grad'
+let playing = false;
+let animD = 0.01;
+let animDir = 1;
+let raf = null;
+let mouseD = null;
+
+// Race state
+let raceOD = 0.01, raceCLD = 0.01, raceStep = 0, raceRaf = null, racePlaying = false;
+
+// Sim state
+let simEpoch = 0, simRaf = null, simRunning = false;
+let simOrigD = 0.01, simClsD = 0.01;
+
+// ── Math ───────────────────────────────────────────────────────────────────
+const lossOrig = d => Math.log(1 - d + 1e-7);
+const lossCls  = d => -Math.log(d + 1e-7);
+const gradOrig = d => Math.abs(1 / (1 - d + 1e-7));
+const gradCls  = d => Math.abs(1 / (d + 1e-7));
+
+// ── Step config ────────────────────────────────────────────────────────────
+const STEPS = [
+  {
+    range: [0.01, 0.99], speed: 0.003,
+    narr: `<strong>Two losses, one goal.</strong><br><br>
+The <span class="ho">original paper</span> asks the generator to <strong>minimize</strong> log(1&minus;D(G(z))). The <span class="hc">class formulation</span> asks it to <strong>maximize</strong> log(D(G(z))).<br><br>
+At the Nash equilibrium these are equivalent. During training, they are <em>very</em> different.`,
+    ins: '', warn: ''
+  },
+  {
+    range: [0.01, 0.2], speed: 0.0015,
+    narr: `<strong>Early training is where it breaks.</strong><br><br>
+At the start D(G(z)) ≈ 0 — the discriminator easily rejects fakes. Watch the gradient meters:<br><br>
+<span class="ho">Original gradient</span>: nearly zero. <strong>The generator stalls.</strong><br>
+<span class="hc">Class gradient</span>: large. <strong>The generator learns rapidly.</strong>`,
+    ins: 'At D(G(z)) ≈ 0: original ∂L/∂D ≈ −1, class ∂L/∂D → −∞. One trains, one stalls.',
+    warn: '⚠ Generator stuck: near-zero gradient from original loss.'
+  },
+  {
+    range: [0.75, 0.99], speed: 0.0015,
+    narr: `<strong>Late training: they converge.</strong><br><br>
+As D(G(z)) → 1, the <span class="ho">original loss</span> steepens and both losses provide a useful signal.<br><br>
+Both reach the same Nash equilibrium. The entire advantage of the <span class="hc">class loss</span> is in <strong>early training speed</strong>.`,
+    ins: 'Both losses work at convergence. The class loss advantage is only at the start.',
+    warn: ''
+  },
+  {
+    range: [0.01, 0.99], speed: 0,
+    narr: `<strong>The speed race.</strong><br><br>
+Each bar advances at a speed proportional to the gradient magnitude — simulating how fast a generator learns with each loss.<br><br>
+Starting from D(G(z)) = 0.01: the <span class="ho">original loss</span> barely moves. The <span class="hc">class loss</span> races ahead.<br><br>
+<span class="ha">This is the core practical difference.</span>`,
+    ins: '', warn: ''
+  },
+  {
+    range: [0.01, 0.99], speed: 0,
+    narr: `<strong>Training simulation.</strong><br><br>
+Blue = real distribution. Red dots = generator samples. Both start identically.<br><br>
+The <span class="hc">class loss</span> generator moves toward the target faster. The <span class="ho">original loss</span> generator stalls early.<br><br>
+<strong>Early stalling compounds: it means late convergence.</strong>`,
+    ins: '', warn: ''
+  },
+  {
+    range: [0.01, 0.99], speed: 0,
+    narr: `<strong>Free exploration.</strong><br><br>
+Drag across the plot. Toggle <strong>Loss</strong> vs <strong>Gradient</strong> views.<br><br>
+In gradient view: the flatness of the <span class="ho">original loss</span> near D=0 is unmistakable. The <span class="hc">class loss</span> completely dominates early on.<br><br>
+Note: we visualize ∂L/∂D as a proxy for learning signal. The actual generator gradient flows through the chain rule via D.`,
+    ins: '', warn: ''
+  }
+];
+
+// ── Step navigation ────────────────────────────────────────────────────────
+function goStep(s) {
+  step = s;
+  document.querySelectorAll('.sbtn').forEach((b,i) => b.classList.toggle('active', i===s));
+  document.getElementById('pf').style.width = ((s+1)/6*100)+'%';
+
+  const cfg = STEPS[s];
+  document.getElementById('narr').innerHTML = cfg.narr;
+  const ins = document.getElementById('ins');
+  ins.textContent = cfg.ins; ins.classList.toggle('show', !!cfg.ins);
+  const warn = document.getElementById('warn');
+  warn.textContent = cfg.warn; warn.classList.toggle('show', false);
+
+  // Panel visibility
+  document.getElementById('curvePanel').style.display = (s < 4) ? '' : '';
+  document.getElementById('racePanel').style.display = (s === 3) ? '' : 'none';
+  document.getElementById('simPanel').style.display = (s === 4) ? '' : 'none';
+  document.getElementById('curvePanel').style.display = (s === 4) ? 'none' : '';
+  document.getElementById('takeawayBox').style.display = (s === 5) ? '' : 'none';
+
+  stopAll();
+  mouseD = null;
+  animD = cfg.range[0]; animDir = 1;
+
+  if (s === 3) { startRace(); return; }
+  if (s === 4) { initSim(); return; }
+
+  if (s < 3 || s === 5) {
+    if (s < 3) { playing = true; startAnim(); }
+    else { draw(0.5, null); updateMeters(0.5); }
+  }
+}
+
+// ── Animation ──────────────────────────────────────────────────────────────
+function startAnim() {
+  document.getElementById('playBtn').textContent = '⏸ Pause';
+  document.getElementById('playBtn').classList.add('playing');
+  const [lo, hi] = STEPS[step].range;
+  const spd = STEPS[step].speed || 0.003;
+  function frame() {
+    if (!playing) return;
+    animD += animDir * spd;
+    if (animD >= hi) { animD = hi; animDir = -1; }
+    if (animD <= lo) { animD = lo; animDir = 1; }
+    draw(animD, null); updateMeters(animD);
+    // Warn badge for step 1
+    if (step === 1) {
+      document.getElementById('warn').classList.toggle('show', animD < 0.12);
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+}
+
+function stopAnim() {
+  playing = false;
+  document.getElementById('playBtn').textContent = '▶ Play';
+  document.getElementById('playBtn').classList.remove('playing');
+  if (raf) { cancelAnimationFrame(raf); raf = null; }
+}
+
+function togglePlay() {
+  if (step === 3) { toggleRace(); return; }
+  if (step === 4) { toggleSim(); return; }
+  if (playing) stopAnim();
+  else { playing = true; startAnim(); }
+}
+
+function resetAll() {
+  stopAll();
+  animD = STEPS[step].range[0]; animDir = 1;
+  mouseD = null;
+  if (step === 3) { resetRace(); return; }
+  if (step === 4) { resetSim(); return; }
+  draw(animD, null); updateMeters(animD);
+}
+
+function stopAll() {
+  stopAnim();
+  if (raceRaf) { cancelAnimationFrame(raceRaf); raceRaf = null; racePlaying = false; }
+  if (simRaf) { cancelAnimationFrame(simRaf); simRaf = null; simRunning = false; }
+  document.getElementById('simBtn').textContent = '▶ Run Simulation';
+  document.getElementById('simBtn').classList.remove('running');
+}
+
+// ── Race ───────────────────────────────────────────────────────────────────
+function startRace() {
+  racePlaying = true;
+  document.getElementById('playBtn').textContent = '⏸ Pause';
+  document.getElementById('playBtn').classList.add('playing');
+  // Use log-scaled gradient so the difference is visible but not instantaneous
+  function frame() {
+    if (!racePlaying) return;
+    const go = Math.log1p(gradOrig(raceOD)) * 0.0006;
+    const gc = Math.log1p(gradCls(raceCLD))  * 0.0006;
+    raceOD  = Math.min(0.999, raceOD  + go);
+    raceCLD = Math.min(0.999, raceCLD + gc);
+    raceStep++;
+    document.getElementById('raceOrig').style.width = (raceOD * 100) + '%';
+    document.getElementById('raceCls').style.width  = (raceCLD * 100) + '%';
+    document.getElementById('raceEpoch').textContent = 'Step ' + raceStep;
+    draw(raceOD, null); updateMeters(raceOD);
+    if (raceOD < 0.999 || raceCLD < 0.999) raceRaf = requestAnimationFrame(frame);
+    else { racePlaying = false; document.getElementById('playBtn').textContent = '▶ Replay'; document.getElementById('playBtn').classList.remove('playing'); }
+  }
+  raceRaf = requestAnimationFrame(frame);
+}
+
+function toggleRace() {
+  if (racePlaying) {
+    racePlaying = false;
+    if (raceRaf) cancelAnimationFrame(raceRaf);
+    document.getElementById('playBtn').textContent = '▶ Resume';
+    document.getElementById('playBtn').classList.remove('playing');
+  } else { startRace(); }
+}
+
+function resetRace() {
+  racePlaying = false; raceOD = 0.01; raceCLD = 0.01; raceStep = 0;
+  if (raceRaf) cancelAnimationFrame(raceRaf);
+  document.getElementById('raceOrig').style.width = '0%';
+  document.getElementById('raceCls').style.width  = '0%';
+  document.getElementById('raceEpoch').textContent = 'Step 0';
+  document.getElementById('playBtn').textContent = '▶ Play';
+  document.getElementById('playBtn').classList.remove('playing');
+}
+
+// ── Training Simulation ────────────────────────────────────────────────────
+const SIM_W = 160, SIM_H = 120;
+const TARGET_X = 0.65, TARGET_Y = 0.5, TARGET_R = 0.18;
+
+function initSim() {
+  simEpoch = 0; simOrigD = 0.01; simClsD = 0.01;
+  drawSim('simOrig', simOrigD, 0);
+  drawSim('simCls', simClsD, 0);
+  document.getElementById('simOrigStat').textContent = 'Epoch 0 / D(G(z)) = 0.01';
+  document.getElementById('simClsStat').textContent = 'Epoch 0 / D(G(z)) = 0.01';
+}
+
+function drawSim(canvasId, dVal, epoch) {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const cx = c.getContext('2d');
+  cx.fillStyle = '#16161f';
+  cx.fillRect(0, 0, SIM_W, SIM_H);
+
+  // Real distribution (blue filled region)
+  const rx = TARGET_X * SIM_W, ry = TARGET_Y * SIM_H, rr = TARGET_R * Math.min(SIM_W, SIM_H);
+  const grad = cx.createRadialGradient(rx, ry, 0, rx, ry, rr);
+  grad.addColorStop(0, 'rgba(61,217,208,0.35)');
+  grad.addColorStop(1, 'rgba(61,217,208,0.02)');
+  cx.beginPath(); cx.arc(rx, ry, rr, 0, Math.PI*2);
+  cx.fillStyle = grad; cx.fill();
+  cx.strokeStyle = 'rgba(61,217,208,0.5)'; cx.lineWidth = 1;
+  cx.stroke();
+
+  // Label
+  cx.fillStyle = 'rgba(61,217,208,0.7)';
+  cx.font = '9px JetBrains Mono, monospace';
+  cx.fillText('real', rx - 10, ry + 4);
+
+  // Generator samples: start center-left, move toward target proportional to dVal
+  const progress = Math.pow(dVal, 0.4);
+  const startX = 0.2, startY = 0.5;
+  const cx2 = startX + (TARGET_X - startX) * progress;
+  const cy2 = startY + (TARGET_Y - startY) * progress;
+  const spread = 0.12 * (1 - progress * 0.7);
+
+  // Seed dots deterministically
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * Math.PI * 2;
+    const r = spread * (0.3 + (i % 5) * 0.15);
+    const px = (cx2 + Math.cos(a) * r) * SIM_W;
+    const py = (cy2 + Math.sin(a) * r) * SIM_H;
+    const alpha = 0.5 + progress * 0.4;
+    cx.beginPath(); cx.arc(px, py, 3, 0, Math.PI*2);
+    cx.fillStyle = `rgba(255,95,95,${alpha})`; cx.fill();
+  }
+
+  // Epoch label
+  cx.fillStyle = 'rgba(255,255,255,0.25)';
+  cx.font = '8px JetBrains Mono, monospace';
+  cx.fillText('epoch ' + epoch, 6, 12);
+}
+
+function toggleSim() {
+  if (simRunning) {
+    simRunning = false;
+    if (simRaf) cancelAnimationFrame(simRaf);
+    document.getElementById('simBtn').textContent = '▶ Resume';
+    document.getElementById('simBtn').classList.remove('running');
+  } else {
+    simRunning = true;
+    document.getElementById('simBtn').textContent = '⏸ Pause';
+    document.getElementById('simBtn').classList.add('running');
+    function frame() {
+      if (!simRunning) return;
+      const go = Math.log1p(gradOrig(simOrigD)) * 0.0005;
+      const gc = Math.log1p(gradCls(simClsD))   * 0.0005;
+      simOrigD = Math.min(0.97, simOrigD + go);
+      simClsD  = Math.min(0.97, simClsD  + gc);
+      simEpoch++;
+      drawSim('simOrig', simOrigD, simEpoch);
+      drawSim('simCls',  simClsD,  simEpoch);
+      document.getElementById('simOrigStat').textContent = `Epoch ${simEpoch} / D(G(z)) = ${simOrigD.toFixed(3)}`;
+      document.getElementById('simClsStat').textContent  = `Epoch ${simEpoch} / D(G(z)) = ${simClsD.toFixed(3)}`;
+      if (simOrigD < 0.96 || simClsD < 0.96) simRaf = requestAnimationFrame(frame);
+      else {
+        simRunning = false;
+        document.getElementById('simBtn').textContent = '▶ Replay';
+        document.getElementById('simBtn').classList.remove('running');
+      }
+    }
+    simRaf = requestAnimationFrame(frame);
+  }
+}
+
+function resetSim() {
+  simRunning = false;
+  if (simRaf) cancelAnimationFrame(simRaf);
+  document.getElementById('simBtn').textContent = '▶ Run Simulation';
+  document.getElementById('simBtn').classList.remove('running');
+  initSim();
+}
+
+// ── Main Canvas Draw ───────────────────────────────────────────────────────
+function setupCanvas(id, h) {
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const w = c.parentElement.clientWidth - 28;
+  c.width = w * dpr; c.height = h * dpr;
+  c.style.width = w + 'px'; c.style.height = h + 'px';
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { ctx, w, h };
+}
+
+function draw(hD, mouseD2) {
+  const { ctx, w, h } = setupCanvas('mainCanvas', 340);
+  ctx.clearRect(0, 0, w, h);
+  const pad = { l:52, r:16, t:18, b:40 };
+  const pw = w - pad.l - pad.r, ph = h - pad.t - pad.b;
+
+  let yMin, yMax, valFn1, valFn2, label1, label2;
+  if (view === 'loss') {
+    yMin = -5; yMax = 2;
+    valFn1 = lossOrig; valFn2 = lossCls;
+    label1 = 'Loss'; label2 = '';
+  } else {
+    yMin = 0; yMax = 15;
+    valFn1 = gradOrig; valFn2 = gradCls;
+    label1 = '|∂L/∂D|'; label2 = '';
+  }
+
+  const dToX = d => pad.l + d * pw;
+  const vToY = v => pad.t + ph - ((Math.min(Math.max(v, yMin), yMax) - yMin) / (yMax - yMin)) * ph;
+
+  // Grid
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 1;
+  [0,0.25,0.5,0.75,1].forEach(v => {
+    const x = dToX(v);
+    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t+ph); ctx.stroke();
+  });
+  const yticks = view === 'loss' ? [-4,-3,-2,-1,0,1] : [0,5,10,15];
+  yticks.forEach(v => {
+    const y = vToY(v);
+    if (y < pad.t-2 || y > pad.t+ph+2) return;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+pw, y); ctx.stroke();
+  });
+
+  // Axes
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t+ph);
+  ctx.moveTo(pad.l, pad.t+ph); ctx.lineTo(pad.l+pw, pad.t+ph);
+  ctx.stroke();
+
+  // Zero line
+  if (view === 'loss') {
+    const zy = vToY(0);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.setLineDash([4,6]); ctx.beginPath();
+    ctx.moveTo(pad.l, zy); ctx.lineTo(pad.l+pw, zy); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Axis labels
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('D(G(z))', pad.l + pw/2, h - 6);
+  ctx.save(); ctx.translate(13, pad.t+ph/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText(label1, 0, 0); ctx.restore();
+
+  ctx.textAlign = 'center';
+  [0,0.25,0.5,0.75,1].forEach(v => {
+    ctx.fillText(v.toFixed(2), dToX(v), pad.t+ph+14);
+  });
+  ctx.textAlign = 'right';
+  yticks.forEach(v => {
+    const y = vToY(v);
+    if (y < pad.t-2 || y > pad.t+ph+2) return;
+    ctx.fillText(v, pad.l-6, y+4);
+  });
+
+  // Draw a curve
+  function drawCurve(fn, color, glowColor) {
+    ctx.save();
+    ctx.shadowColor = glowColor; ctx.shadowBlur = 18;
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+    ctx.beginPath(); let started = false;
+    for (let px = 1; px < pw; px++) {
+      const d = px / pw;
+      if (d < 0.002 || d > 0.998) continue;
+      const v = fn(d);
+      if (v < yMin - 0.5 || v > yMax + 0.5) { started = false; continue; }
+      const x = pad.l + px, y = vToY(v);
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke(); ctx.restore();
+  }
+  drawCurve(valFn1, '#ff5f5f', 'rgba(255,95,95,0.5)');
+  drawCurve(valFn2, '#3dd9d0', 'rgba(61,217,208,0.5)');
+
+  // Active indicator
+  const aD = mouseD2 !== null ? mouseD2 : hD;
+  if (aD !== null && aD > 0.002 && aD < 0.998) {
+    const ax = dToX(aD);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(240,192,64,0.35)';
+    ctx.lineWidth = 1; ctx.setLineDash([3,5]);
+    ctx.beginPath(); ctx.moveTo(ax, pad.t); ctx.lineTo(ax, pad.t+ph);
+    ctx.stroke(); ctx.setLineDash([]); ctx.restore();
+
+    [{ fn: valFn1, col: '#ff5f5f', glow: 'rgba(255,95,95,0.9)' },
+     { fn: valFn2, col: '#3dd9d0', glow: 'rgba(61,217,208,0.9)' }].forEach(({ fn, col, glow }) => {
+      const v = fn(aD);
+      if (v < yMin || v > yMax) return;
+      const py = vToY(v);
+      ctx.save(); ctx.shadowColor = glow; ctx.shadowBlur = 24;
+      ctx.fillStyle = col; ctx.beginPath(); ctx.arc(ax, py, 5, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      // Tangent
+      const eps = 0.01;
+      const slope = (fn(Math.min(aD+eps,0.998)) - fn(Math.max(aD-eps,0.002))) / (2*eps);
+      const vs = slope * (pw / (yMax - yMin));
+      const len = 36;
+      ctx.save(); ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.55;
+      ctx.beginPath();
+      ctx.moveTo(ax - len, py + vs * len / pw * ph);
+      ctx.lineTo(ax + len, py - vs * len / pw * ph);
+      ctx.stroke(); ctx.restore();
+    });
+  }
+}
+
+// ── Meters ─────────────────────────────────────────────────────────────────
+function updateMeters(d) {
+  const go = gradOrig(d), gc = gradCls(d);
+  const MAX = 25;
+  document.getElementById('dVal').textContent = d.toFixed(3);
+  document.getElementById('gOrig').textContent = go > 99 ? '>99' : go.toFixed(2);
+  document.getElementById('gCls').textContent  = gc > 99 ? '>99' : gc.toFixed(2);
+  document.getElementById('fOrig').style.width = Math.min(go/MAX,1)*100 + '%';
+  document.getElementById('fCls').style.width  = Math.min(gc/MAX,1)*100 + '%';
+}
+
+// ── View toggle ────────────────────────────────────────────────────────────
+function setView(v) {
+  view = v;
+  document.querySelectorAll('.vtbtn').forEach((b,i) => b.classList.toggle('active', (i===0 && v==='loss') || (i===1 && v==='grad')));
+  const aD = mouseD !== null ? mouseD : animD;
+  draw(aD, mouseD);
+}
+
+// ── Mouse ──────────────────────────────────────────────────────────────────
+const mc = document.getElementById('mainCanvas');
+mc.addEventListener('mousemove', e => {
+  if (step < 5 && step !== 5) return;
+  const rect = mc.getBoundingClientRect();
+  const { w } = setupCanvas('mainCanvas', 340);
+  const pad = { l:52, r:16 };
+  const pw = w - pad.l - pad.r;
+  const x = e.clientX - rect.left;
+  const d = Math.max(0.002, Math.min(0.998, (x - pad.l) / pw));
+  mouseD = d;
+  stopAnim();
+  draw(animD, mouseD);
+  updateMeters(d);
+});
+mc.addEventListener('mouseleave', () => {
+  if (step !== 5) return;
+  mouseD = null; draw(animD, null); updateMeters(animD);
+});
+
+window.addEventListener('resize', () => {
+  if (step < 4) draw(animD, mouseD);
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+goStep(0);
+</script>
+</body>
+</html>
